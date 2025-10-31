@@ -41,8 +41,9 @@ async function getProfileBySlug(slug: string): Promise<{ profile: ProfileData; u
   }
 }
 
-export default async function ProfilePage({ params }: { params: { slug: string } }) {
-  const data = await getProfileBySlug(params.slug);
+export default async function ProfilePage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const data = await getProfileBySlug(slug);
 
   if (!data) {
     notFound();
@@ -51,8 +52,9 @@ export default async function ProfilePage({ params }: { params: { slug: string }
   return <ProfileView profile={data.profile} userId={data.userId} />;
 }
 
-export async function generateMetadata({ params }: { params: { slug: string } }) {
-  const data = await getProfileBySlug(params.slug);
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const data = await getProfileBySlug(slug);
 
   if (!data) {
     return {
