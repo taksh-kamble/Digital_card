@@ -29,11 +29,10 @@ const colorOptions = [
   { name: 'Rose', value: 'rose', hex: '#f43f5e' },
 ];
 
-// More flexible dimensions
 const MAX_LOGO_HEIGHT = 300;
 const MAX_LOGO_WIDTH = 600;
 const MIN_LOGO_SIZE = 30;
-const FIXED_BANNER_HEIGHT = 128; // Fixed banner height
+const FIXED_BANNER_HEIGHT = 128;
 
 export default function ThemeEditor({ 
   currentLogo, 
@@ -60,7 +59,6 @@ export default function ThemeEditor({
   const [maintainAspectRatio, setMaintainAspectRatio] = useState(true);
   const [aspectRatio, setAspectRatio] = useState(1);
 
-  // Sync with props when they change
   useEffect(() => {
     setLogoUrl(currentLogo || '');
     setLogoPreview(currentLogo || '');
@@ -73,7 +71,6 @@ export default function ThemeEditor({
     }
   }, [currentLogo, currentPrimaryColor, currentSecondaryColor, currentLogoWidth, currentLogoHeight]);
 
-  // Calculate display dimensions for preview (scales down if too large)
   const getDisplayDimensions = (width: number, height: number) => {
     const maxHeight = FIXED_BANNER_HEIGHT - 40;
     const maxWidth = 500;
@@ -141,7 +138,6 @@ export default function ThemeEditor({
     setIsUploading(true);
 
     try {
-      // Load image to get natural dimensions
       const img = new Image();
       const objectUrl = URL.createObjectURL(file);
       
@@ -151,20 +147,16 @@ export default function ThemeEditor({
         img.src = objectUrl;
       });
 
-      // Calculate aspect ratio
       const naturalAspectRatio = img.naturalWidth / img.naturalHeight;
       setAspectRatio(naturalAspectRatio);
 
-      // Set initial dimensions based on natural aspect ratio
       let initialWidth = 100;
       let initialHeight = 100;
 
       if (naturalAspectRatio > 1) {
-        // Landscape
         initialWidth = Math.min(140, MAX_LOGO_WIDTH);
         initialHeight = Math.round(initialWidth / naturalAspectRatio);
       } else {
-        // Portrait or square
         initialHeight = Math.min(100, MAX_LOGO_HEIGHT);
         initialWidth = Math.round(initialHeight * naturalAspectRatio);
       }
@@ -267,7 +259,7 @@ export default function ThemeEditor({
 
   const { displayWidth, displayHeight } = getDisplayDimensions(logoWidth, logoHeight);
   const willBeScaled = displayWidth !== logoWidth || displayHeight !== logoHeight;
-  const isLogoOptimal = logoHeight >= 50 && logoHeight <= 88; // Optimal for 128px fixed banner
+  const isLogoOptimal = logoHeight >= 50 && logoHeight <= 88;
 
   if (!isEditing) {
     return (
@@ -369,13 +361,11 @@ export default function ThemeEditor({
       )}
 
       <div className="space-y-6">
-        {/* Logo Upload */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Company Logo (Max 5MB)
           </label>
           <div className="space-y-4">
-            {/* LIVE PREVIEW - FIXED HEIGHT at 128px */}
             {logoPreview && (
               <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border-2 border-purple-200">
                 <div className="flex items-center justify-between mb-3">
@@ -393,7 +383,6 @@ export default function ThemeEditor({
                   )}
                 </div>
                 
-                {/* FIXED HEIGHT banner preview - always 128px */}
                 <div 
                   className="relative mx-auto rounded-lg flex items-center justify-center overflow-hidden shadow-lg"
                   style={{ 
@@ -415,13 +404,11 @@ export default function ThemeEditor({
                     }}
                   />
                   
-                  {/* Dimension overlay */}
                   <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded font-mono">
                     {Math.round(displayWidth)} × {Math.round(displayHeight)}px {willBeScaled && '(scaled)'}
                   </div>
                 </div>
 
-                {/* Feedback messages */}
                 <div className="mt-3 space-y-2">
                   {isLogoOptimal && !willBeScaled && (
                     <div className="flex items-start gap-2 text-xs text-green-700 bg-green-50 p-2 rounded border border-green-200">
@@ -445,7 +432,6 @@ export default function ThemeEditor({
               </div>
             )}
 
-            {/* Upload Button */}
             <label className="flex flex-col items-center justify-center px-4 py-6 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100 transition">
               {isUploading ? (
                 <>
@@ -468,7 +454,6 @@ export default function ThemeEditor({
               />
             </label>
 
-            {/* Logo Dimensions Control */}
             {logoPreview && (
               <div className="bg-purple-50 rounded-lg p-4 border border-purple-200 space-y-4">
                 <div className="flex items-center justify-between">
@@ -487,7 +472,6 @@ export default function ThemeEditor({
                   </label>
                 </div>
 
-                {/* Width Control */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-sm text-gray-700 font-medium">Width</label>
@@ -513,7 +497,6 @@ export default function ThemeEditor({
                   />
                 </div>
 
-                {/* Height Control */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-sm text-gray-700 font-medium">Height</label>
@@ -547,7 +530,6 @@ export default function ThemeEditor({
           </div>
         </div>
 
-        {/* Primary Color */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-3">
             Primary Color
@@ -574,7 +556,6 @@ export default function ThemeEditor({
             ))}
           </div>
           
-          {/* Custom Primary Color Picker */}
           <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
             <button
               type="button"
@@ -600,6 +581,71 @@ export default function ThemeEditor({
                     value={customPrimaryHex || (isValidHex(primaryColor) ? primaryColor : '')}
                     onChange={(e) => {
                       const hex = e.target.value;
+                      setCustomPrimaryHex(hex);
+                      if (isValidHex(hex)) {
+                        setPrimaryColor(hex);
+                      }
+                    }}
+                    className="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm font-mono"
+                  />
+                </div>
+                <p className="text-xs text-gray-500">Enter a hex color code (e.g., #10B981)</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-3">
+            Secondary Color
+          </label>
+          <div className="grid grid-cols-4 gap-3 mb-3">
+            {colorOptions.map((color) => (
+              <button
+                key={color.value}
+                type="button"
+                onClick={() => {
+                  setSecondaryColor(color.value);
+                  setCustomSecondaryHex('');
+                  setShowSecondaryPicker(false);
+                }}
+                className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition ${
+                  secondaryColor === color.value
+                    ? 'border-purple-500 bg-purple-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="w-10 h-10 rounded-lg" style={{ backgroundColor: color.hex }}></div>
+                <span className="text-xs font-medium text-gray-700">{color.name}</span>
+              </button>
+            ))}
+          </div>
+          
+          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <button
+              type="button"
+              onClick={() => setShowSecondaryPicker(!showSecondaryPicker)}
+              className="flex items-center gap-2 text-sm font-medium text-purple-600 hover:text-purple-700 mb-3"
+            >
+              <Pipette className="w-4 h-4" />
+              {showSecondaryPicker ? 'Hide' : 'Use'} Custom Color
+            </button>
+            
+            {showSecondaryPicker && (
+              <div className="space-y-3">
+                <div className="flex gap-3">
+                  <input
+                    type="color"
+                    value={getColorPreview(secondaryColor)}
+                    onChange={(e) => handleCustomSecondaryColor(e.target.value)}
+                    className="w-16 h-10 rounded border-2 border-gray-300 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    placeholder="#000000"
+                    value={customSecondaryHex || (isValidHex(secondaryColor) ? secondaryColor : '')}
+                    onChange={(e) => {
+                      const hex = e.target.value;
                       setCustomSecondaryHex(hex);
                       if (isValidHex(hex)) {
                         setSecondaryColor(hex);
@@ -614,7 +660,6 @@ export default function ThemeEditor({
           </div>
         </div>
 
-        {/* Preview */}
         <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg p-4 border border-gray-200">
           <p className="text-sm font-medium text-gray-700 mb-3">Color Preview</p>
           <div className="flex items-center gap-3">
@@ -633,7 +678,6 @@ export default function ThemeEditor({
           </div>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex gap-3 pt-4 border-t border-gray-200">
           <button
             type="button"
