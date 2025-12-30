@@ -1,4 +1,4 @@
-// "use client";
+"use client";
 // import React, { useState, useEffect } from "react";
 // import { Zap, Loader2 } from "lucide-react";
 // import Header from "@/components/Header";
