@@ -1,30 +1,17 @@
+"use client";
+
 import React from "react";
-import {
-  Smartphone,
-  Share2,
-  Zap,
-  Globe,
-  ArrowRight,
-  Menu,
-  X,
-  Linkedin,
-  Twitter,
-  Github,
-  Mail,
-  Phone,
-  CheckCircle,
-  User,
-  Image as ImageIcon,
-  Layout,
-  Palette,
-  Upload,
-  Lock,
-  Chrome,
-  Apple,
-  ArrowLeft,
-} from "lucide-react";
+import { Smartphone, Linkedin, Mail, Phone, Globe } from "lucide-react";
 
 export const CardPreview = ({ data }) => {
+  // --- FIX: Safe Avatar Logic ---
+  // If profileUrl is empty, generate a default avatar based on their name
+  const displayAvatar = data.profileUrl?.trim()
+    ? data.profileUrl
+    : `https://api.dicebear.com/7.x/initials/svg?seed=${
+        data.fullName || "User"
+      }`;
+
   // Styles based on layout
   const getLayoutClasses = () => {
     switch (data.layout) {
@@ -80,13 +67,13 @@ export const CardPreview = ({ data }) => {
 
   // Banner Style
   const bannerStyle =
-    data.banner.type === "image"
+    data.banner?.type === "image"
       ? {
           backgroundImage: `url(${data.banner.value})`,
           backgroundSize: "cover",
           backgroundPosition: "center",
         }
-      : { backgroundColor: data.banner.value };
+      : { backgroundColor: data.banner?.value || "#2563eb" };
 
   // Skin Style (Background of the whole card content)
   const skinStyle = data.cardSkin
@@ -112,7 +99,7 @@ export const CardPreview = ({ data }) => {
       </style>
 
       {/* Phone Mockup Container */}
-      <div className="relative mx-auto border-slate-900 bg-slate-900 border-[14px] rounded-[2.5rem] h-[600px] w-[300px] shadow-2xl flex flex-col overflow-hidden">
+      <div className="relative mx-auto border-slate-900 bg-slate-900 border-[14px] rounded-[2.5rem] h-[600px] w-[300px] shadow-2xl flex flex-col overflow-hidden transition-transform duration-500 group-hover:rotate-1 group-hover:scale-[1.01]">
         {/* Notch */}
         <div className="h-[32px] bg-slate-900 w-full absolute top-0 left-0 z-20 flex justify-center">
           <div className="h-[18px] w-[120px] bg-black rounded-b-2xl"></div>
@@ -123,7 +110,7 @@ export const CardPreview = ({ data }) => {
           className={`flex-1 overflow-y-auto hide-scrollbar relative z-10 ${fontFamily}`}
           style={skinStyle}
         >
-          {/* Content Wrapper for Skins (adds opacity/blur if needed) */}
+          {/* Content Wrapper for Skins */}
           <div
             className={`min-h-full ${
               data.layout === "creative" ? "bg-white/80" : "bg-white"
@@ -140,22 +127,11 @@ export const CardPreview = ({ data }) => {
               } w-full transition-all duration-300`}
               style={bannerStyle}
             >
-              {data.layout === "minimal" && (
+              {(data.layout === "minimal" || data.layout === "creative") && (
                 <div className={layout.header}>
                   <div className={layout.avatarWrapper}>
                     <img
-                      src={data.profileUrl}
-                      alt="Avatar"
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                </div>
-              )}
-              {data.layout === "creative" && (
-                <div className={layout.header}>
-                  <div className={layout.avatarWrapper}>
-                    <img
-                      src={data.profileUrl}
+                      src={displayAvatar} // <--- FIXED HERE
                       alt="Avatar"
                       className="h-full w-full object-cover"
                     />
@@ -169,7 +145,7 @@ export const CardPreview = ({ data }) => {
               <div className="-mt-12 px-6 mb-4">
                 <div className="size-24 rounded-xl border-4 border-white bg-slate-200 overflow-hidden shadow-md">
                   <img
-                    src={data.profileUrl}
+                    src={displayAvatar} // <--- FIXED HERE
                     alt="Avatar"
                     className="h-full w-full object-cover"
                   />
@@ -196,6 +172,7 @@ export const CardPreview = ({ data }) => {
 
             {/* Links Section */}
             <div className={layout.links}>
+              {/* Phone */}
               <div className="flex items-center p-3 bg-white/80 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer shadow-sm">
                 <div className="size-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 mr-3">
                   <Phone size={16} />
@@ -208,6 +185,7 @@ export const CardPreview = ({ data }) => {
                 </div>
               </div>
 
+              {/* Email */}
               <div className="flex items-center p-3 bg-white/80 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer shadow-sm">
                 <div className="size-8 rounded-full bg-red-50 flex items-center justify-center text-red-600 mr-3">
                   <Mail size={16} />
@@ -220,6 +198,7 @@ export const CardPreview = ({ data }) => {
                 </div>
               </div>
 
+              {/* Website */}
               <div className="flex items-center p-3 bg-white/80 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer shadow-sm">
                 <div className="size-8 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 mr-3">
                   <Globe size={16} />
@@ -232,6 +211,7 @@ export const CardPreview = ({ data }) => {
                 </div>
               </div>
 
+              {/* LinkedIn (Conditional) */}
               {data.linkedin && (
                 <div className="flex items-center p-3 bg-white/80 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer shadow-sm">
                   <div className="size-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-700 mr-3">
@@ -251,18 +231,18 @@ export const CardPreview = ({ data }) => {
                 <button
                   style={{
                     backgroundColor:
-                      data.banner.type === "color"
+                      data.banner?.type === "color"
                         ? data.banner.value
                         : "#2563EB",
                     backgroundImage:
-                      data.banner.type === "image"
+                      data.banner?.type === "image"
                         ? `url(${data.banner.value})`
                         : "none",
                     backgroundSize: "cover",
                   }}
                   className="w-full py-3 rounded-xl text-white font-bold shadow-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2 relative overflow-hidden"
                 >
-                  {data.banner.type === "image" && (
+                  {data.banner?.type === "image" && (
                     <div className="absolute inset-0 bg-black/30"></div>
                   )}
                   <span className="relative z-10 flex items-center gap-2">
@@ -277,4 +257,5 @@ export const CardPreview = ({ data }) => {
     </div>
   );
 };
+
 export default CardPreview;

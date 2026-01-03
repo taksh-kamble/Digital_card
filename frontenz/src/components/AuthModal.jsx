@@ -1,50 +1,25 @@
 "use client";
 import React, { useState, useEffect } from "react";
+// 1. Import useRouter for redirection
+import { useRouter } from "next/navigation";
+import { X, ArrowLeft, Smartphone, Apple, Sparkles } from "lucide-react";
 import {
-  X,
-  ArrowLeft,
-  Smartphone,
-  Apple,
-  Sparkles, // Added an icon for the banner
-} from "lucide-react";
-import {
-  getAuth,
   signInWithPopup,
   GoogleAuthProvider,
   OAuthProvider,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  onAuthStateChanged,
 } from "firebase/auth";
-import { initializeApp } from "firebase/app";
 
-// --- Firebase Setup (Keep your existing setup) ---
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
+import { auth } from "@/lib/firebase";
+import { setAuthToken, userAPI } from "@/lib/api";
 
-let auth;
-try {
-  if (firebaseConfig.apiKey) {
-    const app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-  }
-} catch (error) {
-  if (!auth) console.warn("Firebase initialization error:", error);
-}
-
-// --- IMAGE URL ---
-// Replace this with your own brand image.
-// Using a high-quality Unsplash ID for demonstration.
 const BANNER_IMAGE_URL =
   "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1964&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
 
-// --- Sub-Component: AuthFormContent (Unchanged from previous version) ---
+// --- Sub-Component: AuthFormContent ---
 const AuthFormContent = ({
   mode,
   formData,
@@ -217,15 +192,41 @@ const AuthFormContent = ({
 
 // --- Main Component ---
 const AuthModal = ({ isOpen, onClose, initialView = "login" }) => {
+  const router = useRouter(); // 2. Initialize router
   const views = ["forgot-password", "login", "signup"];
   const [view, setView] = useState(initialView);
   const [resetSent, setResetSent] = useState(false);
-
   const [formData, setFormData] = useState({
     email: "",
     password: "",
     confirmPassword: "",
   });
+
+  // 1. Manage Auth State and Token Header
+  useEffect(() => {
+    if (!auth) return;
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const token = await user.getIdToken();
+        setAuthToken(token);
+
+        try {
+          await userAPI.createOrUpdate({
+            email: user.email,
+            fullName: user.displayName || "New User",
+            profileUrl: user.photoURL || "",
+          });
+        } catch (error) {
+          console.error("Backend user sync failed:", error);
+        }
+      } else {
+        setAuthToken(null);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -250,14 +251,15 @@ const AuthModal = ({ isOpen, onClose, initialView = "login" }) => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // --- Auth Handlers (Keep existing) ---
   const handleGoogleLogin = async () => {
     if (!auth) return alert("Firebase not configured");
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(auth, provider);
       onClose();
+      router.push("/dashboard"); // 3. Redirect to dashboard
     } catch (error) {
+      console.error(error);
       alert(error.message);
     }
   };
@@ -268,7 +270,9 @@ const AuthModal = ({ isOpen, onClose, initialView = "login" }) => {
     try {
       await signInWithPopup(auth, provider);
       onClose();
+      router.push("/dashboard"); // 3. Redirect to dashboard
     } catch (error) {
+      console.error(error);
       alert(error.message);
     }
   };
@@ -286,6 +290,7 @@ const AuthModal = ({ isOpen, onClose, initialView = "login" }) => {
       if (submitMode === "login") {
         await signInWithEmailAndPassword(auth, email, password);
         onClose();
+        router.push("/dashboard"); // 3. Redirect to dashboard
       } else if (submitMode === "signup") {
         if (password !== confirmPassword) {
           alert("Passwords do not match");
@@ -293,31 +298,26 @@ const AuthModal = ({ isOpen, onClose, initialView = "login" }) => {
         }
         await createUserWithEmailAndPassword(auth, email, password);
         onClose();
+        router.push("/dashboard"); // 3. Redirect to dashboard
       } else if (submitMode === "forgot-password") {
         await sendPasswordResetEmail(auth, email);
         setResetSent(true);
       }
     } catch (error) {
+      console.error(error);
       alert(error.message);
     }
   };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md transition-all duration-300 overflow-y-auto">
-      {/* UPDATED CONTAINER: 
-        1. max-w-4xl (wider)
-        2. flex flex-col md:flex-row (stack on mobile, side-by-side on desktop)
-      */}
       <div className="bg-white rounded-3xl w-full max-w-4xl overflow-hidden shadow-3xl animate-fade-in-up relative my-8 flex flex-col md:flex-row min-h-[600px]">
-        {/* --- NEW LEFT SIDE: IMAGE BANNER (Hidden on small mobile) --- */}
+        {/* Left Side: Image Banner */}
         <div
           className="hidden md:flex md:w-1/2 bg-cover bg-center relative items-end p-10"
           style={{ backgroundImage: `url('${BANNER_IMAGE_URL}')` }}
         >
-          {/* Dark Overlay for text readability */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
-
-          {/* Banner Content */}
           <div className="relative z-10 text-white">
             <div className="flex items-center gap-2 mb-4 text-blue-200">
               <Sparkles size={24} />
@@ -329,23 +329,19 @@ const AuthModal = ({ isOpen, onClose, initialView = "login" }) => {
               Begin your <br /> journey here.
             </h2>
             <p className="text-slate-200 text-lg font-medium">
-              Join our community and unlock exclusive access to everything we
-              have to offer.
+              Join our community and unlock exclusive access.
             </p>
           </div>
         </div>
 
-        {/* --- RIGHT SIDE: AUTH FORMS --- */}
+        {/* Right Side: Auth Forms */}
         <div className="w-full md:w-1/2 relative flex flex-col">
-          {/* Header */}
           <div className="p-8 flex justify-between items-center relative z-10">
-            {/* Dynamic Title Container */}
             <div className="relative h-8 w-full overflow-hidden mr-8">
               {["Reset Password", "Welcome Back!", "Create Account"].map(
                 (title, idx) => (
                   <h3
                     key={title}
-                    // Adjusted alignment to left since it's no longer centered in the whole modal
                     className={`absolute inset-0 text-2xl font-extrabold text-slate-900 text-left transition-all duration-500 transform ${
                       idx === currentViewIndex
                         ? "translate-y-0 opacity-100"
@@ -367,8 +363,6 @@ const AuthModal = ({ isOpen, onClose, initialView = "login" }) => {
             </button>
           </div>
 
-          {/* Sliding Content Container */}
-          {/* Added flex-grow to ensure it fills height if forms are short */}
           <div className="overflow-hidden flex-grow relative">
             <div
               className="flex items-start h-full transition-transform duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]"

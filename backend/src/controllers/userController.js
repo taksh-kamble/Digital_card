@@ -1,12 +1,20 @@
 import { UserModel } from "../models/userModel.js";
+import { SubscriptionModel } from "../models/subscribtionModel.js";
 
 /**
- * Create or Update User Profile
+ * Helper to remove undefined keys from an object
  */
+const cleanData = (obj) => {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([_, v]) => v !== undefined)
+  );
+};
+
 export const upsertUser = async (req, res) => {
   try {
-    const uid = req.user.uid; // 🔐 from Firebase token
+    const uid = req.user.uid;
 
+    // 1. Destructure inputs
     const {
       profileUrl,
       fullName,
@@ -22,43 +30,40 @@ export const upsertUser = async (req, res) => {
       facebook,
     } = req.body;
 
-    const existingUser = await UserModel.findByUid(uid);
-
-    if (!existingUser) {
-      const newUser = await UserModel.create(uid, {
-        profileUrl,
-        fullName,
-        designation,
-        company,
-        bio,
-        phone,
-        email,
-        website,
-        linkedin,
-        twitter,
-        instagram,
-        facebook,
-      });
-
-      return res.status(201).json({
-        newUser: true,
-        user: newUser,
-      });
-    }
-
-    const updatedUser = await UserModel.update(uid, {
+    // 2. Create a clean object (removes undefined values)
+    const userData = cleanData({
       profileUrl,
       fullName,
       designation,
       company,
       bio,
       phone,
+      email,
       website,
       linkedin,
       twitter,
       instagram,
       facebook,
     });
+
+    const existingUser = await UserModel.findByUid(uid);
+
+    if (!existingUser) {
+      // Create user profile
+      const newUser = await UserModel.create(uid, userData);
+
+      // Auto-create FREE subscription
+      const newSubscription = await SubscriptionModel.createFree(uid);
+
+      return res.status(201).json({
+        newUser: true,
+        user: newUser,
+        subscription: newSubscription,
+      });
+    }
+
+    // 3. Update existing user (Pass the clean userData object)
+    const updatedUser = await UserModel.update(uid, userData);
 
     return res.status(200).json({
       newUser: false,

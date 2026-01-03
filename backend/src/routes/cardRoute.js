@@ -7,6 +7,7 @@ import {
   updateCard,
   deleteCard,
   getCardByLink,
+  getCardById,
 } from "../controllers/cardController.js";
 
 const router = express.Router();
@@ -14,6 +15,7 @@ const router = express.Router();
 // Auth routes
 router.post("/", requireAuth, checkCardLimit, createCard);
 router.get("/me", requireAuth, getMyCards);
+router.get("/:cardId", requireAuth, getCardById);
 router.put("/:cardId", requireAuth, updateCard);
 router.delete("/:cardId", requireAuth, deleteCard);
 
