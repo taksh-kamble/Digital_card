@@ -44,7 +44,7 @@ const PLANS = [
     description: "For professionals who want to stand out.",
     recommended: true,
     features: [
-      "Unlimited Digital Business Cards",
+      "5 cards limit",
       "Custom QR Codes",
       "Premium Themes",
       "Analytics Dashboard",
