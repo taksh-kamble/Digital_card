@@ -29,22 +29,21 @@ export default function WalletPage() {
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    // 1. Immediate check: Do we even have a token?
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
-    const token = localStorage.getItem("token");
-    if (!token) return;
+    if (!token) {
+      // No token found? Redirect immediately.
+      router.replace("/login"); // Change '/login' to your actual login route
+      return;
+    }
 
-    fetchWallet();
+    fetchWallet(token);
   }, []);
 
-  const fetchWallet = async () => {
+  const fetchWallet = async (token) => {
     try {
       setLoading(true);
-
-      const token =
-        typeof window !== "undefined" ? localStorage.getItem("token") : null;
-
-      if (!token) return;
 
       const listUrl = `${API_BASE_URL}api/scanned/me`;
       console.log("Fetching wallet from:", listUrl);
@@ -52,13 +51,22 @@ export default function WalletPage() {
       const listResponse = await fetch(listUrl, {
         headers: {
           Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
       });
+
+      // 2. Handle Expired/Invalid Token (401)
+      if (listResponse.status === 401) {
+        handleLogout();
+        return;
+      }
 
       if (!listResponse.ok) throw new Error("Failed to fetch wallet");
 
       const listData = await listResponse.json();
       const scannedItems = listData.scannedCards || [];
+
+      // Fetch details for each scanned card
       const results = await Promise.all(
         scannedItems.map(async (item) => {
           const detailUrl = `${API_BASE_URL}api/scanned/me?cardLink=${encodeURIComponent(
@@ -73,6 +81,7 @@ export default function WalletPage() {
 
           const detailData = await detailRes.json();
           if (!detailData.card) return null;
+          
           return {
             ...detailData.card,
             scannedAt: item.scannedAt,
@@ -95,13 +104,19 @@ export default function WalletPage() {
     }
   };
 
-  // --- HELPERS ---
+  // Helper to clear token and redirect
+  const handleLogout = () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user"); // Clean up user data if you store it
+    }
+    router.replace("/login"); 
+  };
 
+  // --- HELPERS (Unchanged) ---
   const getDateString = (timestamp) => {
     if (!timestamp) return new Date();
-    // Handle Firestore Timestamp
     if (timestamp._seconds) return new Date(timestamp._seconds * 1000);
-    // Handle ISO String
     return new Date(timestamp);
   };
 
@@ -122,7 +137,6 @@ export default function WalletPage() {
         backgroundPosition: "center",
       };
     }
-    // Fallback to color or default gradient
     const color = card.banner?.value || card.accentColor || "#4f46e5";
     return {
       background: `linear-gradient(135deg, ${color}, ${adjustBrightness(
@@ -132,7 +146,6 @@ export default function WalletPage() {
     };
   };
 
-  // Simple helper to lighten a hex color for the gradient
   const adjustBrightness = (col, amt) => {
     let usePound = false;
     if (col[0] === "#") {
@@ -141,14 +154,11 @@ export default function WalletPage() {
     }
     let num = parseInt(col, 16);
     let r = (num >> 16) + amt;
-    if (r > 255) r = 255;
-    else if (r < 0) r = 0;
+    if (r > 255) r = 255; else if (r < 0) r = 0;
     let b = ((num >> 8) & 0x00ff) + amt;
-    if (b > 255) b = 255;
-    else if (b < 0) b = 0;
+    if (b > 255) b = 255; else if (b < 0) b = 0;
     let g = (num & 0x0000ff) + amt;
-    if (g > 255) g = 255;
-    else if (g < 0) g = 0;
+    if (g > 255) g = 255; else if (g < 0) g = 0;
     return (usePound ? "#" : "") + (g | (b << 8) | (r << 16)).toString(16);
   };
 
@@ -179,7 +189,6 @@ export default function WalletPage() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 pt-24 pb-8">
-        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">My Wallet</h1>
@@ -200,7 +209,6 @@ export default function WalletPage() {
           </div>
         </div>
 
-        {/* Content */}
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20">
             <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mb-4" />
@@ -210,7 +218,7 @@ export default function WalletPage() {
           <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center max-w-lg mx-auto">
             <p className="text-red-600 font-medium mb-2">{error}</p>
             <button
-              onClick={fetchWallet}
+              onClick={() => fetchWallet(localStorage.getItem("token"))}
               className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
             >
               Try Again
@@ -245,7 +253,6 @@ export default function WalletPage() {
                 key={`${card.cardLink}-${index}`}
                 className="group bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col"
               >
-                {/* Banner */}
                 <div
                   className="h-24 w-full relative"
                   style={getBannerStyle(card)}
@@ -257,7 +264,6 @@ export default function WalletPage() {
                 </div>
 
                 <div className="px-6 pb-6 flex-grow flex flex-col relative">
-                  {/* Avatar */}
                   <div className="-mt-10 mb-3">
                     {card.profileUrl ? (
                       <img
@@ -272,7 +278,6 @@ export default function WalletPage() {
                     )}
                   </div>
 
-                  {/* Info */}
                   <div className="flex-grow">
                     <h3 className="text-lg font-bold text-gray-900 leading-tight">
                       {card.fullName || "Unnamed Card"}
@@ -301,10 +306,9 @@ export default function WalletPage() {
                     </p>
                   </div>
 
-                  {/* Footer Actions */}
                   <div className="pt-5 mt-4 border-t border-gray-100 flex gap-3">
                     <a
-                      href={`/p/${card.cardLink}`} // Updated URL structure
+                      href={`/p/${card.cardLink}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex-1 flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
