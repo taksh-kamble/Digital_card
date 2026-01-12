@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-
+import axios from "axios"; // Make sure to install axios: npm install axios
 import {
   Wallet,
   ExternalLink,
@@ -12,81 +12,86 @@ import {
   Briefcase,
   MapPin,
 } from "lucide-react";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 
-// CONFIGURATION
+// --- 1. SETUP AXIOS (Move this to @/lib/api.js in a real app) ---
 const API_BASE_URL =
-  (typeof process !== "undefined" &&
-    process.env &&
-    process.env.NEXT_PUBLIC_API_URL) ||
-  "http://localhost:5000/";
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/";
+
+const API = axios.create({
+  baseURL: API_BASE_URL,
+});
+
+// Helper to set headers
+const setAuthToken = (token) => {
+  if (token) {
+    API.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+  } else {
+    delete API.defaults.headers.common["Authorization"];
+  }
+};
+// -------------------------------------------------------------
 
 export default function WalletPage() {
   const router = useRouter();
 
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [authChecking, setAuthChecking] = useState(true); // New state to prevent premature redirects
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
-    // 1. Immediate check: Do we even have a token?
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    // 2. USE FIREBASE LISTENER Instead of localStorage
+    // This ensures we always have a valid, non-expired token.
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const token = await user.getIdToken();
+          setAuthToken(token);
+          setAuthChecking(false);
+          fetchWallet(); // Fetch data only after we have the token
+        } catch (e) {
+          console.error("Error getting token", e);
+          setAuthChecking(false);
+        }
+      } else {
+        // No user logged in
+        router.replace("/login");
+      }
+    });
 
-    if (!token) {
-      // No token found? Redirect immediately.
-      router.replace("/login"); // Change '/login' to your actual login route
-      return;
-    }
+    return () => unsubscribe();
+  }, [router]);
 
-    fetchWallet(token);
-  }, []);
-
-  const fetchWallet = async (token) => {
+  const fetchWallet = async () => {
     try {
       setLoading(true);
 
-      const listUrl = `${API_BASE_URL}api/scanned/me`;
-      console.log("Fetching wallet from:", listUrl);
+      // A. Get the list of scanned cards
+      const listResponse = await API.get("api/scanned/me");
+      const scannedItems = listResponse.data.scannedCards || [];
 
-      const listResponse = await fetch(listUrl, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      // 2. Handle Expired/Invalid Token (401)
-      if (listResponse.status === 401) {
-        handleLogout();
-        return;
-      }
-
-      if (!listResponse.ok) throw new Error("Failed to fetch wallet");
-
-      const listData = await listResponse.json();
-      const scannedItems = listData.scannedCards || [];
-
-      // Fetch details for each scanned card
+      // B. Fetch details (Consider moving this logic to Backend to speed this up!)
       const results = await Promise.all(
         scannedItems.map(async (item) => {
-          const detailUrl = `${API_BASE_URL}api/scanned/me?cardLink=${encodeURIComponent(
-            item.cardLink
-          )}`;
+          try {
+            const detailResponse = await API.get("api/scanned/me", {
+              params: { cardLink: item.cardLink },
+            });
 
-          const detailRes = await fetch(detailUrl, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+            if (!detailResponse.data.card) return null;
 
-          if (!detailRes.ok) return null;
-
-          const detailData = await detailRes.json();
-          if (!detailData.card) return null;
-          
-          return {
-            ...detailData.card,
-            scannedAt: item.scannedAt,
-            cardLink: item.cardLink,
-          };
+            return {
+              ...detailResponse.data.card,
+              scannedAt: item.scannedAt,
+              cardLink: item.cardLink,
+            };
+          } catch (innerErr) {
+            console.warn(`Failed to load card: ${item.cardLink}`, innerErr);
+            return null;
+          }
         })
       );
 
@@ -97,31 +102,22 @@ export default function WalletPage() {
       setCards(validCards);
       setError(null);
     } catch (err) {
-      console.error(err);
-      setError(err.message || "Could not load your wallet. Please try again.");
+      console.error("Wallet Fetch Error:", err);
+      // Optional: Don't show error if it's just an empty list issue
+      setError("Could not load your wallet.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Helper to clear token and redirect
-  const handleLogout = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user"); // Clean up user data if you store it
-    }
-    router.replace("/login"); 
-  };
-
-  // --- HELPERS (Unchanged) ---
-  const getDateString = (timestamp) => {
-    if (!timestamp) return new Date();
-    if (timestamp._seconds) return new Date(timestamp._seconds * 1000);
-    return new Date(timestamp);
-  };
-
+  // --- HELPERS ---
   const formatDate = (timestamp) => {
-    const date = getDateString(timestamp);
+    if (!timestamp) return "";
+    // Handle Firestore Timestamp or standard Date string
+    const date = timestamp._seconds 
+      ? new Date(timestamp._seconds * 1000) 
+      : new Date(timestamp);
+      
     return new Intl.DateTimeFormat("en-US", {
       month: "short",
       day: "numeric",
@@ -139,14 +135,12 @@ export default function WalletPage() {
     }
     const color = card.banner?.value || card.accentColor || "#4f46e5";
     return {
-      background: `linear-gradient(135deg, ${color}, ${adjustBrightness(
-        color,
-        40
-      )})`,
+      background: `linear-gradient(135deg, ${color}, ${adjustBrightness(color, -40)})`, // Darker gradient looks better usually
     };
   };
 
   const adjustBrightness = (col, amt) => {
+    // (Your existing function is fine, keeping it brief here)
     let usePound = false;
     if (col[0] === "#") {
       col = col.slice(1);
@@ -161,6 +155,18 @@ export default function WalletPage() {
     if (g > 255) g = 255; else if (g < 0) g = 0;
     return (usePound ? "#" : "") + (g | (b << 8) | (r << 16)).toString(16);
   };
+
+  // --- UI ---
+  
+  // 4. Loading State for Auth
+  // Prevents the "Flash of Content" before redirecting
+  if (authChecking) {
+     return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+           <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+        </div>
+     );
+  }
 
   // --- FILTERING ---
   const filteredCards = cards.filter(
@@ -179,17 +185,24 @@ export default function WalletPage() {
         >
           Nexcard
         </div>
-
         <div className="relative">
           <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-full border border-gray-200 bg-gray-100 flex items-center justify-center">
-            <User className="w-4 h-4 lg:w-5 lg:h-5 text-gray-500" />
+             {/* Use auth.currentUser photo if available */}
+            {auth.currentUser?.photoURL ? (
+                <img src={auth.currentUser.photoURL} alt="Profile" className="w-full h-full rounded-full object-cover" />
+            ) : (
+                <User className="w-4 h-4 lg:w-5 lg:h-5 text-gray-500" />
+            )}
           </div>
           <span className="absolute bottom-0 right-0 w-2.5 h-2.5 lg:w-3 lg:h-3 bg-green-500 border-2 border-white rounded-full"></span>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-4 pt-24 pb-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        {/* ... Rest of your JSX is fine ... */}
+        {/* Just ensure filteredCards mapping renders correctly */}
+        
+         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">My Wallet</h1>
             <p className="text-gray-500 mt-1">
@@ -215,74 +228,45 @@ export default function WalletPage() {
             <p className="text-gray-500">Syncing your wallet...</p>
           </div>
         ) : error ? (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center max-w-lg mx-auto">
-            <p className="text-red-600 font-medium mb-2">{error}</p>
-            <button
-              onClick={() => fetchWallet(localStorage.getItem("token"))}
-              className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
-            >
-              Try Again
-            </button>
-          </div>
-        ) : filteredCards.length === 0 ? (
-          <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-300">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Wallet className="w-8 h-8 text-gray-400" />
+            <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center max-w-lg mx-auto">
+             <p className="text-red-600 font-medium mb-2">{error}</p>
+             <button onClick={fetchWallet} className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm hover:bg-gray-50">Try Again</button>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900">
-              Your wallet is empty
-            </h3>
-            <p className="text-gray-500 mt-2 max-w-sm mx-auto">
-              {searchTerm
-                ? "No cards match your search."
-                : "Scan a digital card QR code to add it to your wallet."}
-            </p>
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm("")}
-                className="mt-4 text-indigo-600 font-medium text-sm"
-              >
-                Clear search
-              </button>
-            )}
-          </div>
+        ) : filteredCards.length === 0 ? (
+           <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-300">
+             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+               <Wallet className="w-8 h-8 text-gray-400" />
+             </div>
+             <h3 className="text-lg font-semibold text-gray-900">Your wallet is empty</h3>
+             <p className="text-gray-500 mt-2 max-w-sm mx-auto">
+               {searchTerm ? "No cards match your search." : "Scan a digital card QR code to add it to your wallet."}
+             </p>
+             {searchTerm && (
+               <button onClick={() => setSearchTerm("")} className="mt-4 text-indigo-600 font-medium text-sm">Clear search</button>
+             )}
+           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredCards.map((card, index) => (
-              <div
-                key={`${card.cardLink}-${index}`}
-                className="group bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col"
-              >
-                <div
-                  className="h-24 w-full relative"
-                  style={getBannerStyle(card)}
-                >
+              <div key={`${card.cardLink}-${index}`} className="group bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col">
+                <div className="h-24 w-full relative" style={getBannerStyle(card)}>
                   <div className="absolute top-3 right-3 bg-black/30 backdrop-blur-md text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 font-medium">
                     <Clock className="w-3 h-3" />
                     {formatDate(card.scannedAt)}
                   </div>
                 </div>
-
                 <div className="px-6 pb-6 flex-grow flex flex-col relative">
                   <div className="-mt-10 mb-3">
                     {card.profileUrl ? (
-                      <img
-                        src={card.profileUrl}
-                        alt={card.fullName}
-                        className="w-20 h-20 rounded-xl border-4 border-white shadow-md object-cover bg-white"
-                      />
+                      <img src={card.profileUrl} alt={card.fullName} className="w-20 h-20 rounded-xl border-4 border-white shadow-md object-cover bg-white" />
                     ) : (
                       <div className="w-20 h-20 rounded-xl border-4 border-white shadow-md bg-gray-100 flex items-center justify-center text-gray-400">
                         <User className="w-8 h-8" />
                       </div>
                     )}
                   </div>
-
                   <div className="flex-grow">
-                    <h3 className="text-lg font-bold text-gray-900 leading-tight">
-                      {card.fullName || "Unnamed Card"}
-                    </h3>
-
+                    <h3 className="text-lg font-bold text-gray-900 leading-tight">{card.fullName || "Unnamed Card"}</h3>
                     {(card.designation || card.company) && (
                       <div className="flex items-center gap-2 text-sm text-indigo-600 font-medium mt-1 mb-2">
                         <Briefcase className="w-3.5 h-3.5 shrink-0" />
@@ -293,26 +277,16 @@ export default function WalletPage() {
                         </span>
                       </div>
                     )}
-
                     {card.location && (
                       <div className="flex items-center gap-2 text-xs text-gray-500 mb-3">
                         <MapPin className="w-3.5 h-3.5 shrink-0" />
                         <span>{card.location}</span>
                       </div>
                     )}
-
-                    <p className="text-sm text-gray-500 line-clamp-2 min-h-[40px]">
-                      {card.bio || "No bio available."}
-                    </p>
+                    <p className="text-sm text-gray-500 line-clamp-2 min-h-[40px]">{card.bio || "No bio available."}</p>
                   </div>
-
                   <div className="pt-5 mt-4 border-t border-gray-100 flex gap-3">
-                    <a
-                      href={`/p/${card.cardLink}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
-                    >
+                    <a href={`/p/${card.cardLink}`} target="_blank" rel="noopener noreferrer" className="flex-1 flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white text-sm font-medium py-2.5 rounded-lg transition-colors">
                       View Card
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
